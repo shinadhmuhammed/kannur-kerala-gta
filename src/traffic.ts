@@ -40,13 +40,14 @@ interface Vehicle {
   heading: number;
   waited: number; // seconds it has been standing still behind other traffic
   pushing: number; // seconds left of "stop waiting, just go" (see drive)
+  tangled: number; // seconds it has been overlapping one of your vehicles
 }
 
 /** Something traffic must not drive into: the player's car, or the player. */
 export interface Obstacle {
   x: number;
   z: number;
-  /** Metres from its middle to its edge: about 2 for a car, 0.4 for a person. */
+  /** Metres from this point to the edge of the thing: about 1 for a car's side, 0.4 for a person. */
   radius: number;
 }
 
@@ -95,6 +96,27 @@ export class Traffic {
     }
 
     for (const v of this.vehicles) this.drive(v, dt, obstacles);
+
+    // Last resort for accidents. The stopping rules keep traffic off your
+    // vehicles, but you can still drive INTO traffic, or cut across its nose
+    // too late for it to stop. A traffic vehicle that has been overlapping
+    // one of yours for 2 seconds is taken away, so a crash never leaves two
+    // vehicles fused together for good.
+    for (let i = this.vehicles.length - 1; i >= 0; i--) {
+      const v = this.vehicles[i];
+      const sin = Math.sin(v.heading);
+      const cos = Math.cos(v.heading);
+      const overlapping = obstacles.some((o) => {
+        const dx = o.x - v.x;
+        const dz = o.z - v.z;
+        return Math.abs(dx * cos - dz * sin) < v.model.width / 2 && Math.abs(dx * sin + dz * cos) < v.model.length / 2;
+      });
+      v.tangled = overlapping ? v.tangled + dt : 0;
+      if (v.tangled > 2) {
+        this.group.remove(v.model.group);
+        this.vehicles.splice(i, 1);
+      }
+    }
   }
 
   /** Is this spot inside any traffic vehicle? */
@@ -120,20 +142,23 @@ export class Traffic {
     const road = this.roads[v.road];
 
     // --- Speed: cruise, unless something is close in front ------------------
-    const stopForPlayer = obstacles.some((o) => this.sees(v, o, o.radius, 0));
+    // Your vehicles arrive as a row of circles along their bodies (see
+    // main.ts), so traffic stops for any PART of a bus, even one parked
+    // across the road, not only for its middle.
+    const stopForPlayer = obstacles.some((o) => this.sees(v, o, o.radius, o.radius, 0));
     const stopForTraffic =
       v.pushing <= 0 &&
       this.vehicles.some((o, i) => {
         // The 2 means: ignore a vehicle whose middle is less than 2 m ahead.
         // That only happens when two vehicles already overlap (they merged at
         // a junction), and then the right thing is to drive apart.
-        if (o === v || !this.sees(v, o, o.model.length / 2, 2)) return false;
+        if (o === v || !this.sees(v, o, o.model.length / 2, o.model.width / 2, 2)) return false;
         // Other traffic counts only if it faces roughly the same way;
         // vehicles coming towards us are in the other lane.
         if (Math.sin(o.heading) * Math.sin(v.heading) + Math.cos(o.heading) * Math.cos(v.heading) <= 0) return false;
         // Two vehicles merging at a corner can each see the other in front,
         // and would both wait forever. Then the earlier one in the list goes.
-        const iGoFirst = this.sees(o, v, v.model.length / 2, 2) && this.vehicles.indexOf(v) < i;
+        const iGoFirst = this.sees(o, v, v.model.length / 2, v.model.width / 2, 2) && this.vehicles.indexOf(v) < i;
         return !iGoFirst;
       });
     const mustStop = stopForPlayer || stopForTraffic;
@@ -195,10 +220,11 @@ export class Traffic {
 
   /**
    * Is `target` close in front of vehicle `v`, in its path?
-   * @param radius how big the target is, so we stop before its edge
+   * @param radius how far the target reaches towards us, so we stop before its edge
+   * @param halfWidth how far the target reaches sideways
    * @param nearest ignore targets closer ahead than this (middle to middle)
    */
-  private sees(v: Vehicle, target: { x: number; z: number }, radius: number, nearest: number): boolean {
+  private sees(v: Vehicle, target: { x: number; z: number }, radius: number, halfWidth: number, nearest: number): boolean {
     const fx = Math.sin(v.heading); // the direction the vehicle faces
     const fz = Math.cos(v.heading);
     const dx = target.x - v.x;
@@ -208,7 +234,11 @@ export class Traffic {
     // Stop 2.5 m short of it. The faster the vehicle goes, the further ahead
     // it must look to stop in time.
     const reach = v.model.length / 2 + radius + 2.5 + v.speed * 0.9;
-    return ahead > nearest && ahead < reach && aside < 1.9;
+    // "In its path" = the two would touch side to side, plus a small gap.
+    // (This used to be a fixed 1.9 m from the target's MIDDLE, so a bus
+    // could drive straight into the end of another bus beside its lane.)
+    const clearance = v.model.width / 2 + halfWidth + 0.4;
+    return ahead > nearest && ahead < reach && aside < clearance;
   }
 
   private segmentLength(v: Vehicle): number {
@@ -287,7 +317,7 @@ export class Traffic {
     if (this.vehicles.some((o) => Math.hypot(o.x - px, o.z - pz) < 14)) return;
 
     const model = this.randomModel(this.roads[road].width);
-    const v: Vehicle = { model, road, segment: 0, along: 0, direction: 1, speed: 0, x: px, z: pz, heading: 0, waited: 0, pushing: 0 };
+    const v: Vehicle = { model, road, segment: 0, along: 0, direction: 1, speed: 0, x: px, z: pz, heading: 0, waited: 0, pushing: 0, tangled: 0 };
     this.enter(v, road, point);
     // Face along the road straight away, so it does not spin into place.
     const a = v.direction === 1 ? v.segment : v.segment + 1;

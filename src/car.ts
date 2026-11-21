@@ -130,7 +130,18 @@ export class Car {
     // Because we only ever accept a free spot, it can never end up stuck
     // inside a wall.
     const nose = this.length / 2;
-    const crash = [nose, nose / 2, 0, -nose / 2, -nose].some((d) => blocked(x + dirX * d, z + dirZ * d));
+    const along = [nose, nose / 2, 0, -nose / 2, -nose];
+    // One exception: if something is ALREADY inside us where we stand (a
+    // traffic vehicle that drove into our side, say), every move would count
+    // as a crash and we would be stuck for good. Then we let the move
+    // happen, so you can always drive out of a tangle.
+    const oldX = Math.sin(this.heading);
+    const oldZ = Math.cos(this.heading);
+    // Checked every metre along the body, finer than the crash test, so a
+    // small bike under the middle of a bus is not missed.
+    let tangled = false;
+    for (let d = -nose; d <= nose && !tangled; d += 1) tangled = blocked(p.x + oldX * d, p.z + oldZ * d);
+    const crash = !tangled && along.some((d) => blocked(x + dirX * d, z + dirZ * d));
     if (crash) {
       this.speed *= -0.3;
     } else {

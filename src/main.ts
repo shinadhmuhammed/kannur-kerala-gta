@@ -220,7 +220,17 @@ function frame(now: number): void {
   const active = onFoot ? player : car;
   const spot = active.mesh.position;
   // Traffic lives around you, and stops for your vehicles and for you on foot.
-  const obstacles = vehicles.map((v) => ({ x: v.mesh.position.x, z: v.mesh.position.z, radius: v.length / 2 }));
+  // Each vehicle is described to traffic as a row of circles along its body,
+  // one every 1.2 m or so, each as wide as the vehicle. One circle in the
+  // middle is not enough for a 9 m bus: traffic would only avoid its centre.
+  const obstacles: { x: number; z: number; radius: number }[] = [];
+  for (const v of vehicles) {
+    const steps = Math.max(1, Math.ceil(v.length / 1.2));
+    for (let i = 0; i <= steps; i++) {
+      const point = v.spotBeside(0, -v.length / 2 + (v.length * i) / steps);
+      obstacles.push({ x: point.x, z: point.z, radius: v.width / 2 });
+    }
+  }
   if (onFoot) obstacles.push({ x: spot.x, z: spot.z, radius: 0.4 });
   traffic.update(dt, spot, obstacles);
   // People step back from your vehicles (parked or moving) and from traffic.
