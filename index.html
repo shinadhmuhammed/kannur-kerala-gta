@@ -42,6 +42,37 @@
       }
       #duty:empty { display: none; }
       #duty div:first-child { font-weight: 700; color: #ffd23f; }
+      #dest { font-size: 15px; font-weight: 600; color: #7fe0ff; min-height: 20px; }
+      /* The big map (key M): search on the left, the whole town on the right. */
+      #map-overlay {
+        position: fixed; inset: 0; z-index: 10; background: rgba(8, 14, 28, 0.78);
+        display: flex; align-items: center; justify-content: center; padding: 16px;
+        font: 14px system-ui, sans-serif; color: #fff;
+      }
+      #map-overlay[hidden] { display: none; }
+      #map-panel { display: flex; gap: 16px; max-width: 100%; max-height: 100%; }
+      #map-side { width: 300px; display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+      #map-q {
+        height: 44px; padding: 0 14px; border: 0; border-radius: 10px; outline: none;
+        font: 16px system-ui, sans-serif; background: #fff; color: #1c2430;
+      }
+      #map-q:focus { box-shadow: 0 0 0 3px #35d0ff; }
+      #map-note { margin: 0; color: #cfe3ff; min-height: 20px; }
+      #map-results { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1; min-height: 0; border-radius: 10px; }
+      #map-results li { padding: 8px 12px; cursor: pointer; background: rgba(255, 255, 255, 0.08); border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
+      #map-results li:hover, #map-results li.on { background: rgba(53, 208, 255, 0.3); }
+      #map-results b { display: block; }
+      #map-results span { opacity: 0.75; font-size: 13px; }
+      #map-buttons { display: flex; gap: 8px; }
+      #map-buttons button { flex: 1; height: 36px; border: 0; border-radius: 8px; font: 600 13px system-ui, sans-serif; cursor: pointer; background: rgba(255, 255, 255, 0.16); color: #fff; }
+      #map-buttons button:hover { background: rgba(255, 255, 255, 0.28); }
+      #map-big { height: min(calc(100vh - 32px), calc(100vw - 364px)); aspect-ratio: 1; border-radius: 12px; border: 3px solid rgba(255, 255, 255, 0.9); cursor: crosshair; }
+      /* Narrow screens: the map goes on top and the search under it. */
+      @media (max-width: 760px) {
+        #map-panel { flex-direction: column-reverse; align-items: center; }
+        #map-side { width: min(100%, 420px); max-height: 42vh; }
+        #map-big { height: auto; width: min(100%, 50vh); }
+      }
       #help {
         position: fixed; left: 16px; top: 16px;
         font: 14px system-ui, sans-serif; color: #fff;
@@ -50,15 +81,32 @@
     </style>
   </head>
   <body>
-    <div id="help">W / ↑ forward · S / ↓ brake, back · A D / ← → steer · Space handbrake · Shift run · E get in / out · B bus duty · R reset</div>
+    <div id="help">W / ↑ forward · S / ↓ brake, back · A D / ← → steer · Space handbrake · Shift run · E get in / out · B bus duty · M map &amp; search · R reset</div>
     <div id="hint"></div>
     <div id="duty"></div>
     <!-- 360 pixels shown at 180: sharp on high-resolution (Retina) screens. -->
     <canvas id="minimap" width="360" height="360"></canvas>
     <div id="hud">
+      <div id="dest"></div>
       <div id="place"></div>
       <div id="road"></div>
       <span id="speed">0</span> <small>km/h</small>
+    </div>
+    <!-- The big map with search (key M). Hidden until opened. -->
+    <div id="map-overlay" hidden>
+      <div id="map-panel">
+        <div id="map-side">
+          <input id="map-q" type="search" autocomplete="off" spellcheck="false" placeholder="Search a place or road" aria-label="Search a place or road" />
+          <p id="map-note"></p>
+          <ul id="map-results"></ul>
+          <div id="map-buttons">
+            <button id="map-clear" type="button" hidden>Clear destination</button>
+            <button id="map-close" type="button">Close (M)</button>
+          </div>
+        </div>
+        <!-- 1200 pixels shown smaller: sharp on high-resolution screens. -->
+        <canvas id="map-big" width="1200" height="1200"></canvas>
+      </div>
     </div>
     <!-- OpenStreetMap's licence requires showing this credit. -->
     <div id="credit"></div>

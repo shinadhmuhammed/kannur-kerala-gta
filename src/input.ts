@@ -10,7 +10,17 @@ const down = new Set<string>();
 // press, not 60 times a second while the key is held, so it needs this.
 const justPressed = new Set<string>();
 
+// While the big map is open the keyboard belongs to its search box, so the
+// game must not see the keys: typing "w" would drive the bus.
+let paused = false;
+export function setKeysPaused(value: boolean): void {
+  paused = value;
+  down.clear();
+  justPressed.clear();
+}
+
 window.addEventListener("keydown", (e) => {
+  if (paused) return;
   // e.repeat is true for the automatic repeats while a key is held down.
   if (!e.repeat) justPressed.add(e.code);
   down.add(e.code);

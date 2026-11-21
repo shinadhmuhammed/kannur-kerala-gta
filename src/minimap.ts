@@ -68,6 +68,21 @@ export class Minimap {
     for (const line of land.rails) stroke(line, "#555555", 2);
   }
 
+  /** Copy the whole painted town onto another canvas (the big map, key M). */
+  drawWhole(target: HTMLCanvasElement): void {
+    target.getContext("2d")!.drawImage(this.whole, 0, 0, PIXELS, PIXELS, 0, 0, target.width, target.height);
+  }
+
+  /** Where a world point is on the whole map: 0..1 across and 0..1 down. */
+  toMap(x: number, z: number): [number, number] {
+    return [(x + this.half) / (this.half * 2), (z + this.half) / (this.half * 2)];
+  }
+
+  /** The opposite: a spot on the whole map (0..1, 0..1) as a world point. */
+  toWorld(across: number, down: number): [number, number] {
+    return [across * this.half * 2 - this.half, down * this.half * 2 - this.half];
+  }
+
   /**
    * Redraw the corner map around the player.
    * @param target a place to mark, such as the next bus stop

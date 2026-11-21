@@ -7,6 +7,7 @@ import { Buildings, type BuildingData } from "./buildings";
 import { Labels } from "./labels";
 import { Land, type LandData } from "./land";
 import { loadJson } from "./mapData";
+import { type Destination, MapSearch } from "./mapSearch";
 import { Minimap } from "./minimap";
 import { Pedestrians } from "./pedestrians";
 import { type PlaceData, Places } from "./places";
@@ -108,6 +109,26 @@ const PARKED: Controls = { throttle: 0, steer: 0, handbrake: true, reset: false,
 const duty = new BusDuty(roadData, placeData, spawn.x, spawn.z);
 scene.add(duty.beacon);
 
+// --- Big map and search (M) -----------------------------------------------------
+// mapSearch.ts finds the place. Here we only remember it and show the way:
+// a tall light at the place, a dot on the corner map, the distance on screen.
+let destination: Destination | null = null;
+const destinationLight = new THREE.Mesh(
+  new THREE.CylinderGeometry(1.2, 1.2, 120, 12, 1, true),
+  new THREE.MeshBasicMaterial({ color: 0x35d0ff, transparent: true, opacity: 0.45, depthWrite: false, side: THREE.DoubleSide }),
+);
+destinationLight.visible = false;
+scene.add(destinationLight);
+function setDestination(next: Destination | null): void {
+  destination = next;
+  destinationLight.visible = next !== null;
+  if (next) destinationLight.position.set(next.x, 60, next.z);
+}
+const mapSearch = new MapSearch(minimap, placeData, roadData, setDestination);
+const destinationLabel = document.getElementById("dest")!;
+let arrived = ""; // "Arrived at ..." message
+let arrivedFor = 0; // seconds it stays on screen
+
 // The player cannot walk through the world, traffic or any parked vehicle.
 const blockedOnFoot = (x: number, z: number) =>
   solidWorld(x, z) || traffic.hits(x, z) || vehicles.some((v) => v.contains(x, z));
@@ -204,6 +225,17 @@ function frame(now: number): void {
   const dt = Math.min((now - last) / 1000, 0.05);
   last = now;
 
+  // The big map: M opens it. While it is open the game stands still.
+  if (mapSearch.wantsOpen) {
+    const who = onFoot ? player : car;
+    mapSearch.open(who.mesh.position.x, who.mesh.position.z, who.heading);
+  }
+  if (mapSearch.isOpen) {
+    renderer.render(scene, camera);
+    requestAnimationFrame(frame);
+    return;
+  }
+
   const controls = readControls();
 
   // E switches mode, when that is possible right now.
@@ -253,9 +285,23 @@ function frame(now: number): void {
   }
 
   const inReach = onFoot ? vehicleInReach() : null;
+  // --- Destination from the big map: distance, and "arrived" within 25 m ------
+  if (destination) {
+    const metres = Math.hypot(destination.x - spot.x, destination.z - spot.z);
+    if (metres < 25) {
+      arrived = `Arrived at ${destination.name}`;
+      arrivedFor = 4;
+      setDestination(null);
+      mapSearch.clearDestination();
+    }
+  }
+  arrivedFor = Math.max(0, arrivedFor - dt);
+
   hintLabel.textContent = inReach
     ? `E  ${inReach.spec.verb} ${inReach.spec.name}`
-    : inBus && dutyView.lines.length === 0 && Math.abs(bus.speed) < 1
+    : arrivedFor > 0
+      ? arrived
+      : inBus && dutyView.lines.length === 0 && Math.abs(bus.speed) < 1
       ? "B  start bus duty"
       : "";
 
@@ -271,8 +317,14 @@ function frame(now: number): void {
     const near = places.nearest(spot.x, spot.z, 60);
     placeLabel.textContent = near ? `Near ${near.name}` : "";
     labels.update(spot.x, spot.z);
+    if (destination) {
+      const metres = Math.hypot(destination.x - spot.x, destination.z - spot.z);
+      const far = metres < 1000 ? `${Math.round(metres / 10) * 10} m` : `${(metres / 1000).toFixed(1)} km`;
+      destinationLabel.textContent = `Going to ${destination.name} · ${far}`;
+    } else destinationLabel.textContent = "";
   }
-  minimap.update(spot.x, spot.z, active.heading, dutyView.target);
+  // On bus duty the dot shows the next stop; otherwise your chosen place.
+  minimap.update(spot.x, spot.z, active.heading, dutyView.target ?? destination);
 
   renderer.render(scene, camera);
   requestAnimationFrame(frame);
@@ -281,4 +333,4 @@ requestAnimationFrame(frame);
 
 // Lets you inspect things from the browser console while learning:
 // `game.car().speed`, `game.vehicles`
-Object.assign(window, { game: { car: () => car, vehicles, player, roads, buildings, land, traffic, places, labels, trees, pedestrians, duty } });
+Object.assign(window, { game: { car: () => car, vehicles, player, roads, buildings, land, traffic, places, labels, trees, pedestrians, duty, mapSearch, destination: () => destination } });
