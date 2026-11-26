@@ -13,6 +13,8 @@ import { Pedestrians } from "./pedestrians";
 import { type PlaceData, Places } from "./places";
 import { Player } from "./player";
 import { Roads, type RoadData } from "./roads";
+import { Station } from "./station";
+import { Train } from "./train";
 import { Traffic } from "./traffic";
 import { Trees } from "./trees";
 import { loadVehicleModels } from "./vehicleModels";
@@ -48,6 +50,10 @@ const labels = new Labels(placeData);
 const ground = new Ground(buildingData, roadData.halfWidth, roadData.halfDepth);
 const trees = new Trees(roadData, landData.rails, buildings, land, ground);
 scene.add(ground.mesh, labels.group, trees.group, pedestrians.group);
+// The railway station and the trains that call at it.
+const station = new Station(landData, buildingData);
+const train = new Train(landData);
+scene.add(station.group, train.group);
 const minimap = new Minimap(document.querySelector<HTMLCanvasElement>("#minimap")!, roadData, landData, buildingData);
 scene.add(land.group, roads.group, buildings.mesh, traffic.group);
 
@@ -58,6 +64,8 @@ const spawn = roads.findSpawn();
 const bus = new Car(BUS, spawn, roadData.halfWidth, roadData.halfDepth);
 
 const solidWorld = (x: number, z: number) => buildings.hits(x, z) || land.inWater(x, z);
+// A vehicle also cannot climb a platform or drive through a train.
+const solidForVehicles = (x: number, z: number) => solidWorld(x, z) || station.blocksVehicle(x, z) || train.hits(x, z);
 
 /** A free spot on the road's edge near the bus, out of the way of traffic. */
 function parkingSpot(taken: { x: number; z: number }[]): { x: number; z: number; heading: number } {
@@ -93,7 +101,7 @@ scene.add(player.mesh, ...vehicles.map((v) => v.mesh));
 // What a vehicle cannot drive through: the world, traffic, and your other
 // parked vehicles.
 const blockedFor = (self: Car) => (x: number, z: number) =>
-  solidWorld(x, z) || traffic.hits(x, z) || vehicles.some((v) => v !== self && v.contains(x, z));
+  solidForVehicles(x, z) || traffic.hits(x, z) || vehicles.some((v) => v !== self && v.contains(x, z));
 
 // --- In a vehicle or on foot -------------------------------------------------
 // The whole game is in one of two "modes". Each frame, the mode decides who
@@ -130,8 +138,11 @@ let arrived = ""; // "Arrived at ..." message
 let arrivedFor = 0; // seconds it stays on screen
 
 // The player cannot walk through the world, traffic or any parked vehicle.
+// On foot you CAN step up onto a platform and climb the footbridge stairs;
+// the station only stops you walking off the side of a bridge.
 const blockedOnFoot = (x: number, z: number) =>
-  solidWorld(x, z) || traffic.hits(x, z) || vehicles.some((v) => v.contains(x, z));
+  solidWorld(x, z) || traffic.hits(x, z) || train.hits(x, z) ||
+  station.blocksWalker(x, z, player.mesh.position.y) || vehicles.some((v) => v.contains(x, z));
 
 const EXIT_SPEED = 3; // m/s. You cannot jump out of a moving vehicle (yet).
 
@@ -197,10 +208,11 @@ function updateCamera(dt: number, snap = false): void {
   const behind = (d: number) => [p.x - Math.sin(target.heading) * d, p.z - Math.cos(target.heading) * d] as const;
   while (reach > 3 && buildings.hits(...behind(reach))) reach -= 1;
   const [camX, camZ] = behind(reach);
-  wanted.set(camX, Math.max(2.2, (up * reach) / back), camZ);
+  // p.y is not 0 when you stand on a platform or a footbridge.
+  wanted.set(camX, p.y + Math.max(2.2, (up * reach) / back), camZ);
   // 1 - e^(-k·dt) gives the same smoothness at 30 fps and at 144 fps.
   camera.position.lerp(wanted, snap ? 1 : 1 - Math.exp(-5 * dt));
-  lookAt.set(p.x, onFoot ? 1.4 : 2, p.z);
+  lookAt.set(p.x, p.y + (onFoot ? 1.4 : 2), p.z);
   camera.lookAt(lookAt);
 }
 updateCamera(0, true);
@@ -246,7 +258,12 @@ function frame(now: number): void {
   // The keyboard goes to the player on foot, otherwise to the vehicle you
   // are in. Every other vehicle stays parked.
   for (const v of vehicles) v.update(dt, !onFoot && v === car ? controls : PARKED, blockedFor(v));
-  if (onFoot) player.update(dt, controls, blockedOnFoot);
+  if (onFoot) {
+    player.update(dt, controls, blockedOnFoot);
+    // Stand on whatever floor is here: ground, platform, stairs or bridge.
+    const feet = player.mesh.position;
+    feet.y = station.heightAt(feet.x, feet.z, feet.y);
+  }
   else if (car.spec.isBike) player.rideOn(car.mesh.position.x, car.mesh.position.z, car.heading, car.lean);
 
   const active = onFoot ? player : car;
@@ -264,6 +281,10 @@ function frame(now: number): void {
     }
   }
   if (onFoot) obstacles.push({ x: spot.x, z: spot.z, radius: 0.4 });
+  // The train brakes for you and your vehicles; traffic waits for the train.
+  train.update(dt, onFoot ? [...vehicles.map((v) => v.mesh.position), spot] : vehicles.map((v) => v.mesh.position));
+  station.update(spot.x, spot.z);
+  obstacles.push(...train.circles());
   traffic.update(dt, spot, obstacles);
   // People step back from your vehicles (parked or moving) and from traffic.
   pedestrians.update(dt, spot, vehicles.map((v) => v.mesh.position));
@@ -333,4 +354,4 @@ requestAnimationFrame(frame);
 
 // Lets you inspect things from the browser console while learning:
 // `game.car().speed`, `game.vehicles`
-Object.assign(window, { game: { car: () => car, vehicles, player, roads, buildings, land, traffic, places, labels, trees, pedestrians, duty, mapSearch, destination: () => destination } });
+Object.assign(window, { game: { car: () => car, vehicles, player, roads, buildings, land, traffic, places, labels, trees, pedestrians, duty, station, train, mapSearch, destination: () => destination } });

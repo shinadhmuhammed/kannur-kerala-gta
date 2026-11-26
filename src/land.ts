@@ -22,6 +22,8 @@ export interface LandData {
   breakwaters: number[][];
   // Single spots [x, z].
   lighthouses: [number, number][];
+  /** Where trains stop: one point on the track for each platform number. */
+  trainStops: { platform: string; x: number; z: number }[];
 }
 
 export class Land {

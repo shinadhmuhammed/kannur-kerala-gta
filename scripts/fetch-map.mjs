@@ -196,7 +196,11 @@ const buildings = ways
     const points = outline(way);
     const floors = parseFloat(way.tags["building:levels"]);
     const tagged = parseFloat(way.tags.height) || (floors ? floors * 3.2 : 0);
-    return { height: round(tagged || guessFloors(area(points), way.id) * 3.2 + 0.4), points };
+    const building = { height: round(tagged || guessFloors(area(points), way.id) * 3.2 + 0.4), points };
+    // The railway station gets its own hand-made model (src/station.ts), so
+    // the game must know which outline it is.
+    if (way.tags.building === "train_station") building.kind = "train_station";
+    return building;
   })
   .filter((b) => b.points.length >= 6); // need at least 3 corners
 
@@ -216,6 +220,10 @@ const land = {
   fortWalls: lines((t) => t.historic === "fort"),
   breakwaters: lines((t) => t.man_made === "breakwater"),
   lighthouses: ways.filter((w) => w.tags?.man_made === "lighthouse").map((w) => centre(outline(w))),
+  // Where trains stop at the station: one point on the track per platform.
+  trainStops: nodes
+    .filter((n) => n.tags?.railway === "stop")
+    .map((n) => ({ platform: n.tags.ref ?? "", x: toX(n.lon), z: toZ(n.lat) })),
 };
 
 // --- Sea ---------------------------------------------------------------------

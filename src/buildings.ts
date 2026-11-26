@@ -13,6 +13,8 @@ import { concreteTexture, tileTexture, wallTexture } from "./textures";
 interface Building {
   height: number; // metres
   points: number[]; // outline, flat list [x0, z0, x1, z1, ...]
+  /** Set on the few buildings that have their own hand-made model. */
+  kind?: string;
 }
 
 export interface BuildingData {
@@ -44,6 +46,12 @@ export class Buildings {
     const colour = new THREE.Color();
 
     data.buildings.forEach((building, n) => {
+      // The railway station is drawn by station.ts. It is still remembered
+      // below, so you cannot drive or walk through it.
+      if (building.kind === "train_station") {
+        this.addToCells(building);
+        return;
+      }
       const h = building.height;
       const area = signedArea(building.points);
       // Outlines come drawn in either direction. Make them all go the same

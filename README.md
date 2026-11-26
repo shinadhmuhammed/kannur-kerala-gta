@@ -17,6 +17,9 @@ buildings and 895 named places, all at their real positions.
   off, pay fares, and each leg has a time allowance. At the end you get a summary.
 - **Find any place.** Press M for a map of the whole town with a search box. Type a
   place or road name, or click the map, and the game marks it as your destination.
+- **Visit Kannur railway station.** The platforms, tracks and both footbridges are
+  where they really are. Walk onto a platform, climb the stairs, cross the bridge,
+  and watch a train come in, stop and leave.
 - **Share the road.** Traffic drives the streets and stops for you. Pedestrians walk
   the pavements and wait at bus stops.
 
@@ -104,8 +107,22 @@ Everything is in `src/`, one topic per file.
 | `traffic.ts`, `pedestrians.ts` | Other vehicles and people |
 | `busDuty.ts` | The rules of bus duty |
 | `minimap.ts`, `mapSearch.ts` | The corner map, the big map and the search |
+| `station.ts`, `train.ts` | Kannur railway station, and the trains and overhead wires |
 | `places.ts`, `labels.ts` | Named places and their signs |
 | `input.ts` | Keyboard |
+
+## Railway station
+
+The station's layout comes from the map: the building's outline, platform 1, the
+island with platforms 2 and 3, the tracks and the two footbridges. Its look is
+modelled by hand in the usual style of a Kerala station, not copied from photos.
+
+- On foot you can step onto the platforms and use the footbridge stairs.
+- Vehicles cannot climb the platforms.
+- A train arrives every few minutes, alternating between platforms 1 and 2,
+  and waits half a minute.
+- The train brakes if you or one of your vehicles is on the line, and traffic
+  waits for it to pass.
 
 ## Built with
 
